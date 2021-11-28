@@ -1,0 +1,126 @@
+From 52d2de9696cfb512d7691c44652c5688b8cf1d8a Mon Sep 17 00:00:00 2001
+From: Leonardo Diaz <zaid.leonardo@gmail.com>
+Date: Sat, 27 Nov 2021 12:26:54 -0800
+Subject: [PATCH] add zsh shell path option
+
+---
+ Sources/ShellOut.swift                        | 28 +++++++++++++++----
+ Tests/ShellOutTests/ShellOutTests+Linux.swift |  3 +-
+ Tests/ShellOutTests/ShellOutTests.swift       | 20 +++++++++++++
+ 3 files changed, 44 insertions(+), 7 deletions(-)
+
+diff --git a/Sources/ShellOut.swift b/Sources/ShellOut.swift
+index 255c52c..d092337 100644
+--- a/Sources/ShellOut.swift
++++ b/Sources/ShellOut.swift
+@@ -33,14 +33,16 @@ import Dispatch
+     at path: String = ".",
+     process: Process = .init(),
+     outputHandle: FileHandle? = nil,
+-    errorHandle: FileHandle? = nil
++    errorHandle: FileHandle? = nil,
++    shellType: ShellType = .bashPath
+ ) throws -> String {
+     let command = "cd \(path.escapingSpaces) && \(command) \(arguments.joined(separator: " "))"
+ 
+     return try process.launchBash(
+         with: command,
+         outputHandle: outputHandle,
+-        errorHandle: errorHandle
++        errorHandle: errorHandle,
++        shellType: shellType
+     )
+ }
+ 
+@@ -101,14 +103,16 @@ import Dispatch
+     at path: String = ".",
+     process: Process = .init(),
+     outputHandle: FileHandle? = nil,
+-    errorHandle: FileHandle? = nil
++    errorHandle: FileHandle? = nil,
++    shellType: ShellType = .bashPath
+ ) throws -> String {
+     return try shellOut(
+         to: command.string,
+         at: path,
+         process: process,
+         outputHandle: outputHandle,
+-        errorHandle: errorHandle
++        errorHandle: errorHandle,
++        shellType: shellType
+     )
+ }
+ 
+@@ -123,6 +127,12 @@ public struct ShellOutCommand {
+     }
+ }
+ 
++/// Used to specify the path of which shell to use. Default is set to Bash.
++public enum ShellType: String {
++    case bashPath = "/bin/bash"
++    case zshPath = "/bin/zsh"
++}
++
+ /// Git commands
+ public extension ShellOutCommand {
+     /// Initialize a git repository
+@@ -379,8 +389,14 @@ extension ShellOutError: LocalizedError {
+ // MARK: - Private
+ 
+ private extension Process {
+-    @discardableResult func launchBash(with command: String, outputHandle: FileHandle? = nil, errorHandle: FileHandle? = nil) throws -> String {
+-        launchPath = "/bin/bash"
++    @discardableResult func launchBash(with command: String, outputHandle: FileHandle? = nil, errorHandle: FileHandle? = nil, shellType: ShellType = .bashPath) throws -> String {
++        // Default shell path is set to Bash
++        launchPath = ShellType.bashPath.rawValue
++        
++        if shellType == .zshPath {
++            launchPath = shellType.rawValue
++        }
++        
+         arguments = ["-c", command]
+ 
+         // Because FileHandle's readabilityHandler might be called from a
+diff --git a/Tests/ShellOutTests/ShellOutTests+Linux.swift b/Tests/ShellOutTests/ShellOutTests+Linux.swift
+index 508ad34..99d54e6 100644
+--- a/Tests/ShellOutTests/ShellOutTests+Linux.swift
++++ b/Tests/ShellOutTests/ShellOutTests+Linux.swift
+@@ -18,7 +18,8 @@ extension ShellOutTests {
+         ("testSeriesOfCommandsAtPath", testSeriesOfCommandsAtPath),
+         ("testThrowingError", testThrowingError),
+         ("testGitCommands", testGitCommands),
+-        ("testSwiftPackageManagerCommands", testSwiftPackageManagerCommands)
++        ("testSwiftPackageManagerCommands", testSwiftPackageManagerCommands),
++        ("testZshShellCommands", testZshShellCommands)
+     ]
+ }
+ #endif
+diff --git a/Tests/ShellOutTests/ShellOutTests.swift b/Tests/ShellOutTests/ShellOutTests.swift
+index 90a8fd3..8ddbea2 100644
+--- a/Tests/ShellOutTests/ShellOutTests.swift
++++ b/Tests/ShellOutTests/ShellOutTests.swift
+@@ -174,4 +174,24 @@ class ShellOutTests: XCTestCase {
+         try shellOut(to: .generateSwiftPackageXcodeProject(), at: packagePath)
+         XCTAssertTrue(try shellOut(to: "ls -a", at: packagePath).contains("SwiftPackageManagerTest.xcodeproj"))
+     }
++    
++    func testZshShellCommands() throws {
++        // Check current shell type
++        let bashNameEcho = try shellOut(to: "echo $0")
++        XCTAssertEqual(bashNameEcho, "/bin/bash")
++        
++        let zshNameEcho = try shellOut(to: "echo $0", shellType: .zshPath)
++        XCTAssertEqual(zshNameEcho, "/bin/zsh")
++        
++        // Test with arguments
++        let echo = try shellOut(to: "echo", arguments: ["Hello world"], shellType: .zshPath)
++        XCTAssertEqual(echo, "Hello world")
++
++        // Test with single command at path
++        try shellOut(to: "echo \"Hello\" > \(NSTemporaryDirectory())ShellOutTests-SingleCommand.txt", shellType: .zshPath)
++        let textFileContent = try shellOut(to: "cat ShellOutTests-SingleCommand.txt",
++                                           at: NSTemporaryDirectory(), shellType: .zshPath)
++
++        XCTAssertEqual(textFileContent, "Hello")
++    }
+ }
