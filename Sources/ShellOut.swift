@@ -68,7 +68,8 @@ import Dispatch
     at path: String = ".",
     process: Process = .init(),
     outputHandle: FileHandle? = nil,
-    errorHandle: FileHandle? = nil
+    errorHandle: FileHandle? = nil,
+    shellType: ShellType = .bashPath
 ) throws -> String {
     let command = commands.joined(separator: " && ")
 
@@ -77,7 +78,8 @@ import Dispatch
         at: path,
         process: process,
         outputHandle: outputHandle,
-        errorHandle: errorHandle
+        errorHandle: errorHandle,
+        shellType: shellType
     )
 }
 
